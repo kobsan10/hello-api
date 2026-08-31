@@ -1,5 +1,5 @@
 import { ObjectId } from "mongodb";
-import { getNotes } from "@/lib/mongodb";
+import { getNotes, NOT_DELETED, STATUS } from "@/lib/mongodb";
 import { error, json, preflight, serverError } from "@/lib/http";
 
 // Mongo's _id is a 24-character hex string; anything else can't match a document.
@@ -7,7 +7,7 @@ function toObjectId(id: string): ObjectId | null {
   return /^[0-9a-fA-F]{24}$/.test(id) ? new ObjectId(id) : null;
 }
 
-// GET /api/notes/:id — read one note
+// GET /api/notes/:id — read one note. A soft-deleted note reads as 404.
 export async function GET(_request: Request, ctx: RouteContext<"/api/notes/[id]">) {
   const { id } = await ctx.params;
   const _id = toObjectId(id);
@@ -16,7 +16,7 @@ export async function GET(_request: Request, ctx: RouteContext<"/api/notes/[id]"
 
   try {
     const notes = await getNotes();
-    const note = await notes.findOne({ _id });
+    const note = await notes.findOne({ _id, ...NOT_DELETED });
 
     if (!note) return error("Note not found", 404);
 
@@ -64,8 +64,9 @@ export async function PUT(request: Request, ctx: RouteContext<"/api/notes/[id]">
 
   try {
     const notes = await getNotes();
+    // NOT_DELETED in the filter stops a soft-deleted note from being edited.
     const note = await notes.findOneAndUpdate(
-      { _id },
+      { _id, ...NOT_DELETED },
       { $set: { ...changes, updatedAt: new Date() } },
       { returnDocument: "after" }
     );
@@ -78,7 +79,16 @@ export async function PUT(request: Request, ctx: RouteContext<"/api/notes/[id]">
   }
 }
 
-// DELETE /api/notes/:id — remove one note
+/**
+ * DELETE /api/notes/:id — soft delete.
+ *
+ * The document is kept and its `status` is flipped to "DELETED" instead of being
+ * removed, so the data stays recoverable and auditable. This is an update, which is
+ * why it uses `findOneAndUpdate` rather than `deleteOne` — the same mechanism as PUT.
+ *
+ * NOT_DELETED in the filter makes this return 404 on an already-deleted note rather
+ * than silently overwriting `deletedAt` with a later timestamp.
+ */
 export async function DELETE(_request: Request, ctx: RouteContext<"/api/notes/[id]">) {
   const { id } = await ctx.params;
   const _id = toObjectId(id);
@@ -87,11 +97,16 @@ export async function DELETE(_request: Request, ctx: RouteContext<"/api/notes/[i
 
   try {
     const notes = await getNotes();
-    const result = await notes.deleteOne({ _id });
+    const now = new Date();
+    const note = await notes.findOneAndUpdate(
+      { _id, ...NOT_DELETED },
+      { $set: { status: STATUS.DELETED, deletedAt: now, updatedAt: now } },
+      { returnDocument: "after" }
+    );
 
-    if (result.deletedCount === 0) return error("Note not found", 404);
+    if (!note) return error("Note not found", 404);
 
-    return json({ deleted: id });
+    return json({ message: "Note soft deleted", note });
   } catch (err) {
     return serverError(err, `DELETE /api/notes/${id}`, "Could not write to the database");
   }

@@ -1,14 +1,40 @@
-import { MongoClient, ServerApiVersion, type Collection, type Db } from "mongodb";
+import {
+  MongoClient,
+  ServerApiVersion,
+  type Collection,
+  type Db,
+  type Filter,
+} from "mongodb";
 
 const DB_NAME = process.env.MONGODB_DB ?? "hello_api";
 const COLLECTION = "notes";
 
+export const STATUS = {
+  ACTIVE: "ACTIVE",
+  DELETED: "DELETED",
+} as const;
+
+export type Status = (typeof STATUS)[keyof typeof STATUS];
+
 export type Note = {
   title: string;
   content: string;
+  status: Status;
   createdAt: Date;
   updatedAt: Date;
+  /** Set when the note is soft deleted; absent while it is active. */
+  deletedAt?: Date;
 };
+
+/**
+ * Matches every note that has NOT been soft deleted.
+ *
+ * `$ne` is used rather than `{ status: "ACTIVE" }` on purpose: notes created before
+ * soft delete existed have no `status` field at all, and in MongoDB a missing field
+ * is "not equal" to "DELETED" — so those older notes still show up. An equality
+ * filter on "ACTIVE" would silently hide them.
+ */
+export const NOT_DELETED: Filter<Note> = { status: { $ne: STATUS.DELETED } };
 
 // `next dev` re-evaluates modules on every edit, so a module-level variable would
 // leak a new connection pool per reload. Caching on globalThis survives HMR.
