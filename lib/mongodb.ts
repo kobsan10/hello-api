@@ -8,6 +8,7 @@ import {
 
 const DB_NAME = process.env.MONGODB_DB ?? "hello_api";
 const COLLECTION = "notes";
+const USERS_COLLECTION = "user";
 
 export const STATUS = {
   ACTIVE: "ACTIVE",
@@ -82,4 +83,16 @@ export async function getDb(): Promise<Db> {
 export async function getNotes(): Promise<Collection<Note>> {
   const db = await getDb();
   return db.collection<Note>(COLLECTION);
+}
+
+export type User = {
+  email: string;
+  username: string;
+  /** bcrypt hash — never the plaintext password. */
+  password: string;
+};
+
+export async function getUsers(): Promise<Collection<User>> {
+  const db = await getDb();
+  return db.collection<User>(USERS_COLLECTION);
 }
