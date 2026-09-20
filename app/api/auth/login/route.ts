@@ -1,6 +1,6 @@
 import bcrypt from "bcrypt";
-import { stringifySetCookie } from "cookie";
 import jwt from "jsonwebtoken";
+import { ADMIN_ID, authCookie } from "@/lib/auth";
 import { ConfigError, getUsers } from "@/lib/mongodb";
 import { error, json, preflight, serverError } from "@/lib/http";
 
@@ -9,7 +9,7 @@ const ADMIN_USER = process.env.ADMIN_USER;
 const ADMIN_PASS = process.env.ADMIN_PASS;
 
 type AuthUser = {
-  _id: string;
+  id: string;
   email: string;
   username: string;
 };
@@ -43,15 +43,7 @@ export async function POST(request: Request) {
       { message: "Login successful", user },
       200,
       {
-        "Set-Cookie": stringifySetCookie({
-          name: "token",
-          value: token,
-          httpOnly: true,
-          sameSite: process.env.NODE_ENV === "development" ? "lax" : "none",
-          path: "/",
-          maxAge: 60 * 60 * 24 * 7, // 7 days
-          secure: process.env.NODE_ENV === "production",
-        }),
+        "Set-Cookie": authCookie(token, 60 * 60 * 24 * 7), // 7 days
       }
     );
   } catch (err) {
@@ -62,7 +54,7 @@ export async function POST(request: Request) {
 function checkAdmin(email: string, password: string): AuthUser | null {
   if (!ADMIN_USER || !ADMIN_PASS) return null;
   if (ADMIN_USER === email && ADMIN_PASS === password) {
-    return { _id: "-1", email, username: "admin" };
+    return { id: ADMIN_ID, email, username: "admin" };
   }
   return null;
 }
@@ -76,7 +68,7 @@ async function checkUser(email: string, password: string): Promise<AuthUser | nu
   const matches = await bcrypt.compare(password, user.password);
   if (!matches) return null;
 
-  return { _id: String(user._id), email: user.email, username: user.username };
+  return { id: String(user._id), email: user.email, username: user.username };
 }
 
 function getJwtToken(user: AuthUser): string {
@@ -87,7 +79,7 @@ function getJwtToken(user: AuthUser): string {
   }
 
   return jwt.sign(
-    { id: user._id, email: user.email, username: user.username },
+    { id: user.id, email: user.email, username: user.username },
     JWT_SECRET,
     { expiresIn: "7d" }
   );

@@ -1,5 +1,6 @@
 import {
   MongoClient,
+  ObjectId,
   ServerApiVersion,
   type Collection,
   type Db,
@@ -90,9 +91,45 @@ export type User = {
   username: string;
   /** bcrypt hash — never the plaintext password. */
   password: string;
+  createdAt?: Date;
+  updatedAt?: Date;
 };
 
 export async function getUsers(): Promise<Collection<User>> {
   const db = await getDb();
   return db.collection<User>(USERS_COLLECTION);
+}
+
+export type Item = {
+  name: string;
+  description: string;
+  createdBy: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export async function getItems(): Promise<Collection<Item>> {
+  const db = await getDb();
+  return db.collection<Item>("item");
+}
+
+export type AuditAction = "LIST" | "READ" | "CREATE" | "UPDATE" | "DELETE";
+
+export type AuditEntry = {
+  action: AuditAction;
+  itemId?: string;
+  detail?: string;
+  userId: string;
+  username: string;
+  at: Date;
+};
+
+export async function getAudit(): Promise<Collection<AuditEntry>> {
+  const db = await getDb();
+  return db.collection<AuditEntry>("audit_log");
+}
+
+// Mongo's _id is a 24-character hex string; anything else can't match a document.
+export function toObjectId(id: string): ObjectId | null {
+  return /^[0-9a-fA-F]{24}$/.test(id) ? new ObjectId(id) : null;
 }

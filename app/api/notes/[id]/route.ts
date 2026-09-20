@@ -1,11 +1,5 @@
-import { ObjectId } from "mongodb";
-import { getNotes, NOT_DELETED, STATUS } from "@/lib/mongodb";
+import { getNotes, NOT_DELETED, STATUS, toObjectId } from "@/lib/mongodb";
 import { error, json, preflight, serverError } from "@/lib/http";
-
-// Mongo's _id is a 24-character hex string; anything else can't match a document.
-function toObjectId(id: string): ObjectId | null {
-  return /^[0-9a-fA-F]{24}$/.test(id) ? new ObjectId(id) : null;
-}
 
 // GET /api/notes/:id — read one note. A soft-deleted note reads as 404.
 export async function GET(_request: Request, ctx: RouteContext<"/api/notes/[id]">) {
